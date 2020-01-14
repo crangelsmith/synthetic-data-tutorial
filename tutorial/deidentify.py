@@ -11,13 +11,15 @@ import numpy as np
 
 import filepaths
 
-
 def main():
-    print('running de-identification steps...')
-    start = time.time()
-
     # "_df" is the usual way people refer to a Pandas DataFrame object
     hospital_ae_df = pd.read_csv(filepaths.hospital_ae_data)
+
+    deindentify(hospital_ae_df)
+
+def deindentify(hospital_ae_df):
+    print('running de-identification steps...')
+    start = time.time()
 
     print('removing Health Service ID numbers...')
     hospital_ae_df = remove_health_service_numbers(hospital_ae_df)
@@ -45,6 +47,7 @@ def main():
     elapsed = round(time.time() - start, 2)
     print('done in ' + str(elapsed) + ' seconds.')
 
+    return hospital_ae_df
 
 def remove_health_service_numbers(hospital_ae_df: pd.DataFrame) -> pd.DataFrame:
     """Drops the Health Service ID numbers column from the dataset

@@ -18,6 +18,7 @@ import numpy as np
 import scipy.stats as stats
 from scipy.linalg import eigh, cholesky
 from scipy.stats import norm
+import statsmodels.api as sm
 
 import filepaths
 
@@ -25,8 +26,11 @@ import filepaths
 
 num_of_rows = 10000
 
-
 def main():
+
+    generate_fake_dataset()
+
+def generate_fake_dataset():
     print('generating data...')
     start = time.time()
 
@@ -36,7 +40,7 @@ def main():
     hospital_ae_dataset['Health Service ID'] = generate_health_service_id_numbers()
 
     print('generating patient ages and times in A&E...')
-    (hospital_ae_dataset['Age'], hospital_ae_dataset['Time in A&E (mins)']) = generate_ages_times_in_age()
+    (hospital_ae_dataset['Age'], hospital_ae_dataset['Time in A&E (mins)']) = generate_ages_times_in_age_kde()
 
     print('generating hospital instances...')
     hospital_ae_dataset['Hospital'] = generate_hospitals()
@@ -54,10 +58,11 @@ def main():
     hospital_ae_dataset['Postcode'] = generate_postcodes()
 
     write_out_dataset(hospital_ae_dataset, filepaths.hospital_ae_data)
-    print('dataset written out to: ', filepaths.hospital_ae_data)
 
     elapsed = round(time.time() - start, 2)
     print('done in ' + str(elapsed) + ' seconds.')
+
+    return pd.DataFrame(hospital_ae_dataset)
 
 
 def generate_ages_times_in_age() -> (list, list):
@@ -78,6 +83,7 @@ def generate_ages_times_in_age() -> (list, list):
     mean = np.array([41, 60])
     cov = corr2cov(correlations, stdev)
 
+    print (cov)
     data = np.random.multivariate_normal(mean=mean, cov=cov, size=num_of_rows)
     data = np.array(data, dtype=int)
 
@@ -90,6 +96,53 @@ def generate_ages_times_in_age() -> (list, list):
     times_in_ae = data[:, 1].tolist()
 
     return (ages, times_in_ae)
+
+def generate_ages_times_in_age_kde() -> (list, list):
+    """
+    Generates correlated ages and waiting times and returns them as lists
+
+    Obviously normally distributed ages is not very true to real life but is fine for our mock data.
+
+    Correlated random data generation code based on:
+    https://realpython.com/python-random/
+    """
+    # Start with a correlation matrix and standard deviations.i
+    # 0.9 is the correlation between ages and waiting times, and the correlation of a variable with itself is 1
+    times_in_ae_init = np.random.normal(3,1,size=(1,num_of_rows))[0]
+    ages_init = make_gaussian_mixture_data(num_of_rows)
+
+    dens_time_age = sm.nonparametric.KDEMultivariate(data=[times_in_ae_init, ages_init],var_type = 'cc', bw = [100,100])
+
+    data = resample(dens_time_age,num_of_rows)
+
+    # negative ages or waiting times wouldn't make sense
+    # so set any negative values to 0 and 1 respectively
+    data[np.nonzero(data[:, 0] < 1)[0], 1] = 0
+    data[np.nonzero(data[:, 1] < 1)[0], 0] = 1
+
+    ages = data[1, :].tolist()
+    times_in_ae = data[0, :].tolist()
+
+    cov = np.diag(dens_time_age.bw) ** 2
+
+    print (cov)
+    return (ages, times_in_ae)
+
+def resample(kde, size):
+    n, d = kde.data.shape
+    indices = np.random.randint(0, n, size)
+    cov = np.diag(kde.bw)**2
+    cov = [[100., 50.],[50., 100.]]
+    means = kde.data[indices, :]
+    norm = np.random.multivariate_normal(np.zeros(d), cov, size)
+    return np.transpose(means + norm)
+
+def make_gaussian_mixture_data(N, f=0.7, rseed=1):
+    rand = np.random.RandomState(rseed)
+    x = np.random.normal(60,5,size=(1,num_of_rows))[0]
+
+    x[int(f * N):] += -55
+    return x
 
 
 def corr2cov(correlations: np.ndarray, stdev: np.ndarray) -> np.ndarray:
